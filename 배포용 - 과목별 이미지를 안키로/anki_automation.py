@@ -229,15 +229,17 @@ def process_images(base_dir="."):
             my_model = genanki.Model(
                 model_id,
                 'Simple Image Card',
+                # Field order: front (Processed Image), back (Original Image), metadata
                 fields=[
-                    {'name': 'Original Image'},
                     {'name': 'Processed Image'},
+                    {'name': 'Original Image'},
                     {'name': 'Original Filename'},
                 ],
                 templates=[{
                     'name': 'Card 1',
-                    'qfmt': '{{Original Image}}',
-                    'afmt': '{{FrontSide}}<hr id="answer">{{Processed Image}}<br>Original Filename: {{Original Filename}}',
+                    # Front: processed image. Back: original image + filename
+                    'qfmt': '{{Processed Image}}',
+                    'afmt': '{{FrontSide}}<hr id="answer">{{Original Image}}<br>Original Filename: {{Original Filename}}',
                 }])
 
             my_deck = genanki.Deck(
@@ -279,9 +281,10 @@ def process_images(base_dir="."):
 
                 my_note = genanki.Note(
                     model=my_model,
+                    # Field order matches model: Processed Image, Original Image, Original Filename
                     fields=[
-                        '<br>'.join(original_html),
                         '<br>'.join(processed_html),
+                        '<br>'.join(original_html),
                         original_filename
                     ])
                 my_deck.add_note(my_note)
@@ -299,9 +302,10 @@ def process_images(base_dir="."):
                 
                 my_note = genanki.Note(
                     model=my_model,
+                    # Field order matches model: Processed Image (front), Original Image (back), Filename
                     fields=[
-                        f'<img src="{original_img_filename}">',
                         f'<img src="{processed_img_filename}">',
+                        f'<img src="{original_img_filename}">',
                         original_filename
                     ])
                 my_deck.add_note(my_note)
