@@ -149,7 +149,8 @@ def process_images(base_dir="."):
             try:
                 for file in os.listdir(subject_root):
                     image_path = os.path.join(subject_root, file)
-                    if os.path.isfile(image_path) and file.lower().endswith(('.png', '.jpg', '.jpeg')):
+                    # Accept common screenshot and camera image formats (case-insensitive)
+                    if os.path.isfile(image_path) and file.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.tif', '.tiff', '.webp', '.gif', '.heic')):
                         try:
                             original_image = Image.open(image_path)
                             original_width, original_height = original_image.size
@@ -348,8 +349,8 @@ def process_images(base_dir="."):
             dirs.remove(anki_cards_dir_name)
 
         for file in files:
-            # 이미지 파일만 처리
-            if file.lower().endswith(('.png', '.jpg', '.jpeg')):
+            # 이미지 파일만 처리 (여러 형식 허용)
+            if file.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.tif', '.tiff', '.webp', '.gif', '.heic')):
                 file_path = os.path.join(root, file)
                 try:
                     os.remove(file_path)
