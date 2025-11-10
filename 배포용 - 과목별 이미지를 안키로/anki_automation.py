@@ -207,54 +207,52 @@ def process_images(base_dir="."):
         except Exception as e:
             print(f"이미지 처리 오류 {item[2]}: {e}")
 
-        # 그룹화
-        person_name = item[0]
+        # 그룹화: 주제(subject)별로 모든 사람의 이미지를 합칩니다 (덱을 과목 단위로 하나만 생성하려면)
         subject_name = item[1]
-        if person_name not in grouped_data:
-            grouped_data[person_name] = {}
-        if subject_name not in grouped_data[person_name]:
-            grouped_data[person_name][subject_name] = []
-        grouped_data[person_name][subject_name].append(item)
+        if subject_name not in grouped_data:
+            grouped_data[subject_name] = []
+        grouped_data[subject_name].append(item)
 
     # 4. 안키 덱 생성
     print("\n안키 덱 생성 중...")
     decks_to_create = []
     base_model_id = 1234567890
 
-    for person_name, subjects_data in grouped_data.items():
-        for subject_name, image_items in subjects_data.items():
-            print(f"덱 준비 중: {subject_name} ({person_name})")
-            subject_hash = int(hashlib.sha256(subject_name.encode('utf-8')).hexdigest(), 16) % (10**9)
-            model_id = base_model_id + subject_hash
+    # grouped_data now maps subject_name -> list of items (across persons)
+    for subject_name, image_items in grouped_data.items():
+        print(f"덱 준비 중: {subject_name}")
+        subject_hash = int(hashlib.sha256(subject_name.encode('utf-8')).hexdigest(), 16) % (10**9)
+        model_id = base_model_id + subject_hash
 
-            my_model = genanki.Model(
-                model_id,
-                'Simple Image Card',
-                # Field order: front (Processed Image), back (Original Image), metadata
-                fields=[
-                    {'name': 'Processed Image'},
-                    {'name': 'Original Image'},
-                    {'name': 'Original Filename'},
-                ],
-                templates=[{
-                    'name': 'Card 1',
-                    # Front: processed image. Back: original image + filename
-                    'qfmt': '{{Processed Image}}',
-                    'afmt': '{{FrontSide}}<hr id="answer">{{Original Image}}<br>Original Filename: {{Original Filename}}',
-                }])
+        my_model = genanki.Model(
+            model_id,
+            'Simple Image Card',
+            # Field order: front (Processed Image), back (Original Image), metadata
+            fields=[
+                {'name': 'Processed Image'},
+                {'name': 'Original Image'},
+                {'name': 'Original Filename'},
+            ],
+            templates=[{
+                'name': 'Card 1',
+                # Front: processed image. Back: original image + filename
+                'qfmt': '{{Processed Image}}',
+                'afmt': '{{FrontSide}}<hr id="answer">{{Original Image}}<br>Original Filename: {{Original Filename}}',
+            }])
 
-            my_deck = genanki.Deck(
-                abs(hash(subject_name)),
-                '자동으로 만든 덱::자동으로 만든 '+subject_name)
+        my_deck = genanki.Deck(
+            abs(hash(subject_name)),
+            '자동으로 만든 덱::자동으로 만든 '+subject_name)
 
-            decks_to_create.append((my_deck, my_model, image_items, person_name, subject_name))
+        # Store deck and items (subject-level)
+        decks_to_create.append((my_deck, my_model, image_items, subject_name))
 
     # 5. 안키 패키지 생성
     print("\n안키 패키지 생성 중...")
     anki_output_dir = os.path.join(base_dir, anki_cards_dir_name)
     os.makedirs(anki_output_dir, exist_ok=True)
 
-    for my_deck, my_model, image_items, person_name, subject_name in decks_to_create:
+    for my_deck, my_model, image_items, subject_name in decks_to_create:
         for item in image_items:
             original_filename = item[2]
             processed_regions = item[4]
@@ -315,7 +313,7 @@ def process_images(base_dir="."):
             try:
                 base_apkg_filename = f"완성된 {subject_name}.apkg"
                 apkg_output_path = os.path.join(anki_output_dir, base_apkg_filename)
-                
+
                 counter = 1
                 while os.path.exists(apkg_output_path):
                     name, ext = os.path.splitext(base_apkg_filename)
