@@ -398,6 +398,7 @@ def main():
             print(f"Error creating Anki package: {e}")
 
 
+
     # Clean up processed images
     print("\nCleaning up processed images...")
     if os.path.exists(output_dir):
@@ -406,6 +407,18 @@ def main():
             print("Cleaned up processed images directory")
         except Exception as e:
             print(f"Error cleaning up processed images: {e}")
+
+    # Delete images in '완성된 안키 카드들' folder (except .apkg files)
+    print("\nDeleting images in '완성된 안키 카드들' folder...")
+    if os.path.exists(anki_output_dir):
+        try:
+            for file in os.listdir(anki_output_dir):
+                if file.lower().endswith(('.png', '.jpg', '.jpeg')):
+                    file_path = os.path.join(anki_output_dir, file)
+                    os.remove(file_path)
+                    print(f"Deleted Anki card image: {file_path}")
+        except Exception as e:
+            print(f"Error deleting Anki card image: {e}")
 
     # 원본 이미지 삭제
     print("\nDeleting original images...")
