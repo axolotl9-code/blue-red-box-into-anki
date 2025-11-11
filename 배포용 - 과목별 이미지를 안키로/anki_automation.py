@@ -160,8 +160,11 @@ def main():
     base_dir = os.getcwd()
     print(f"Working in directory: {base_dir}")
 
+
     # Create a list to store the image data
     image_data_list = []
+    # 원본 이미지 경로를 저장할 리스트
+    original_image_paths = []
 
     # Define the name of the directory to exclude from subjects
     anki_cards_dir_name = "완성된 안키 카드들"
@@ -201,7 +204,8 @@ def main():
                         image_path = os.path.join(subject_root, file)
                         try:
                             original_image = Image.open(image_path)
-                            image_data_list.append([person_name, subject_name, file, original_image])
+                            image_data_list.append([person_name, subject_name, file, original_image, image_path])
+                            original_image_paths.append(image_path)
                             print(f"  Added image: {file}")
                         except Exception as e:
                             print(f"Error processing image {image_path}: {e}")
@@ -237,21 +241,17 @@ def main():
         original_image = item[3]
         try:
             blue_boxes = find_blue_boxes(original_image)
-            
             if blue_boxes:
                 print(f"Found {len(blue_boxes)} blue boxes in image: {item[2]}")
                 processed_regions = []
-                
                 for i, blue_box in enumerate(blue_boxes):
                     cropped_image = crop_image_to_box(original_image, blue_box)
                     processed_cropped = boxing(cropped_image)
                     processed_regions.append((i, cropped_image, processed_cropped))
-                
                 item.append(processed_regions)
             else:
                 processed_image = boxing(original_image)
                 item.append([(None, original_image, processed_image)])
-                
         except Exception as e:
             print(f"Error processing image {item[2]}: {e}")
 
@@ -287,12 +287,10 @@ def main():
     for item in image_data_list:
         person_name = item[0]
         subject_name = item[1]
-        
         if person_name not in grouped_data:
             grouped_data[person_name] = {}
         if subject_name not in grouped_data[person_name]:
             grouped_data[person_name][subject_name] = []
-            
         grouped_data[person_name][subject_name].append(item)
 
     # Create Anki decks
@@ -333,21 +331,16 @@ def main():
         for item in image_items:
             original_filename = item[2]
             processed_regions = item[4]
-            
             if processed_regions[0][0] is not None:
                 processed_html = []
                 original_html = []
-                
                 for idx, orig_crop, proc_crop in processed_regions:
                     name, ext = os.path.splitext(original_filename)
                     region_suffix = f"_region{idx+1}"
-                    
                     processed_img_filename = f"{name}{region_suffix}-1_processed{ext}"
                     original_img_filename = f"{name}{region_suffix}-1_original{ext}"
-                    
                     processed_html.append(f'<img src="{processed_img_filename}">')
                     original_html.append(f'<img src="{original_img_filename}">')
-                
                 my_note = genanki.Note(
                     model=my_model,
                     fields=[
@@ -355,11 +348,9 @@ def main():
                         '<br>'.join(original_html),
                         original_filename
                     ])
-                
             else:
                 processed_img_filename = f"{original_filename.rsplit('.', 1)[0]}-1_processed.{original_filename.rsplit('.', 1)[1]}"
                 original_img_filename = f"{original_filename.rsplit('.', 1)[0]}-1_original.{original_filename.rsplit('.', 1)[1]}"
-                
                 my_note = genanki.Note(
                     model=my_model,
                     fields=[
@@ -367,7 +358,6 @@ def main():
                         f'<img src="{original_img_filename}">',
                         original_filename
                     ])
-            
             my_deck.add_note(my_note)
 
         # Package deck with media files
@@ -407,6 +397,7 @@ def main():
         except Exception as e:
             print(f"Error creating Anki package: {e}")
 
+
     # Clean up processed images
     print("\nCleaning up processed images...")
     if os.path.exists(output_dir):
@@ -415,6 +406,16 @@ def main():
             print("Cleaned up processed images directory")
         except Exception as e:
             print(f"Error cleaning up processed images: {e}")
+
+    # 원본 이미지 삭제
+    print("\nDeleting original images...")
+    for image_path in original_image_paths:
+        try:
+            if os.path.exists(image_path):
+                os.remove(image_path)
+                print(f"Deleted original image: {image_path}")
+        except Exception as e:
+            print(f"Error deleting image {image_path}: {e}")
 
 if __name__ == "__main__":
     main()
