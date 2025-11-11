@@ -310,11 +310,12 @@ def main():
                 fields=[
                     {'name': 'Processed Image'},
                     {'name': 'Original Image'},
+                    {'name': 'Original Filename'},
                 ],
                 templates=[{
                     'name': 'Card 1',
                     'qfmt': '{{Processed Image}}',
-                    'afmt': '{{FrontSide}}<hr id="answer">{{Original Image}}',
+                    'afmt': '{{FrontSide}}<hr id="answer">{{Original Image}}<br>Original Filename: {{Original Filename}}',
                 }])
 
             my_deck = genanki.Deck(
@@ -352,6 +353,7 @@ def main():
                     fields=[
                         '<br>'.join(processed_html),
                         '<br>'.join(original_html),
+                        original_filename
                     ])
                 
             else:
@@ -363,6 +365,7 @@ def main():
                     fields=[
                         f'<img src="{processed_img_filename}">',
                         f'<img src="{original_img_filename}">',
+                        original_filename
                     ])
             
             my_deck.add_note(my_note)
