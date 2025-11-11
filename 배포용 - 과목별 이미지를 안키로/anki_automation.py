@@ -282,6 +282,7 @@ def main():
                 orig_crop.save(original_img_save_path)
                 csv_writer.writerow([processed_img_save_name, original_img_save_name])
 
+
     # Group data by person and subject
     grouped_data = {}
     for item in image_data_list:
