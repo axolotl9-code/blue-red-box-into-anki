@@ -411,11 +411,7 @@ def main():
     print("\nCleaning up processed images...")
     if os.path.exists(output_dir):
         try:
-            for filename in os.listdir(output_dir):
-                file_path = os.path.join(output_dir, filename)
-                if os.path.isfile(file_path):
-                    os.remove(file_path)
-            os.rmdir(output_dir)
+            shutil.rmtree(output_dir)
             print("Cleaned up processed images directory")
         except Exception as e:
             print(f"Error cleaning up processed images: {e}")
