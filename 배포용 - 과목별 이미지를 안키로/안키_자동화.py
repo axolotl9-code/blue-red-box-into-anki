@@ -87,14 +87,24 @@ def main():
         subject_path = os.path.join(subjects_dir, subject_name)
         if not os.path.isdir(subject_path):
             continue
-        for file in os.listdir(subject_path):
+        # Collect image files and sort them by creation time (oldest first)
+        try:
+            candidate_files = [f for f in os.listdir(subject_path)
+                               if os.path.isfile(os.path.join(subject_path, f))
+                               and f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+        except Exception:
+            candidate_files = []
+
+        # Sort by creation time so earlier-created images become earlier Anki notes
+        candidate_files.sort(key=lambda f: os.path.getctime(os.path.join(subject_path, f)))
+
+        for file in candidate_files:
             image_path = os.path.join(subject_path, file)
-            if os.path.isfile(image_path) and file.lower().endswith(('.png', '.jpg', '.jpeg')):
-                try:
-                    original_image = Image.open(image_path)
-                    image_data_list.append([subject_name, file, original_image])
-                except Exception as e:
-                    print(f"이미지 처리 오류: {image_path}, {e}")
+            try:
+                original_image = Image.open(image_path)
+                image_data_list.append([subject_name, file, original_image])
+            except Exception as e:
+                print(f"이미지 처리 오류: {image_path}, {e}")
 
     # 이미지 리사이즈
     target_width = 1280
