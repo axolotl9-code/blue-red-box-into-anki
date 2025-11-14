@@ -133,8 +133,8 @@ def main():
                 ts_for_sort = ts
             return (ts_for_sort, fname.lower())
 
-        # 최신 사진이 먼저 오도록 역순 정렬
-        candidate_files.sort(key=sort_key, reverse=True)
+        # 오래된 사진이 먼저 오도록 정렬 (찍은 순서대로 카드가 만들어지도록)
+        candidate_files.sort(key=sort_key)
 
         for file in candidate_files:
             image_path = os.path.join(subject_path, file)
