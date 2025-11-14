@@ -133,7 +133,8 @@ def main():
                 ts_for_sort = ts
             return (ts_for_sort, fname.lower())
 
-        candidate_files.sort(key=sort_key)
+        # 최신 사진이 먼저 오도록 역순 정렬
+        candidate_files.sort(key=sort_key, reverse=True)
 
         for file in candidate_files:
             image_path = os.path.join(subject_path, file)
