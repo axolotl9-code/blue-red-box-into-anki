@@ -133,8 +133,7 @@ def main():
                 ts_for_sort = ts
             return (ts_for_sort, fname.lower())
 
-        # Newest photo first in Anki (reverse chronological)
-        candidate_files.sort(key=sort_key, reverse=True)
+        candidate_files.sort(key=sort_key)
 
         for file in candidate_files:
             image_path = os.path.join(subject_path, file)
