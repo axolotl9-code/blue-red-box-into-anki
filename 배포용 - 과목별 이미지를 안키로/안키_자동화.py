@@ -9,6 +9,8 @@ import shutil
 from PIL import Image, ImageDraw
 import cv2
 import numpy as np
+import datetime
+import time
 
 def boxing(image_input):
     if isinstance(image_input, str):
@@ -83,6 +85,30 @@ def main():
         print(f"과목들 폴더가 없습니다: {subjects_dir}")
         return
 
+    def get_image_taken_timestamp(path):
+        """Return image taken time as a POSIX timestamp (float) if available from EXIF DateTimeOriginal.
+        Fallback to file modification time. Return None only if both fail.
+        """
+        try:
+            with Image.open(path) as im:
+                exif = im.getexif()
+                if exif:
+                    # 36867 is the tag for DateTimeOriginal
+                    dto = exif.get(36867) or exif.get(306)  # try DateTimeOriginal then DateTime
+                    if dto:
+                        # EXIF datetime format: 'YYYY:MM:DD HH:MM:SS'
+                        try:
+                            dt = datetime.datetime.strptime(dto, "%Y:%m:%d %H:%M:%S")
+                            return dt.timestamp()
+                        except Exception:
+                            pass
+        except Exception:
+            pass
+        try:
+            return os.path.getmtime(path)
+        except Exception:
+            return None
+
     for subject_name in os.listdir(subjects_dir):
         subject_path = os.path.join(subjects_dir, subject_name)
         if not os.path.isdir(subject_path):
@@ -95,8 +121,19 @@ def main():
         except Exception:
             candidate_files = []
 
-        # Sort by creation time so earlier-created images become earlier Anki notes
-        candidate_files.sort(key=lambda f: os.path.getctime(os.path.join(subject_path, f)))
+        # Sort by photo taken time (EXIF DateTimeOriginal) if available.
+        # Fallback: file modification time, then filename to ensure deterministic order.
+        def sort_key(fname):
+            path = os.path.join(subject_path, fname)
+            ts = get_image_taken_timestamp(path)
+            # None should sort after real timestamps; use a tuple so filename acts as tiebreaker
+            if ts is None:
+                ts_for_sort = float('inf')
+            else:
+                ts_for_sort = ts
+            return (ts_for_sort, fname.lower())
+
+        candidate_files.sort(key=sort_key)
 
         for file in candidate_files:
             image_path = os.path.join(subject_path, file)
