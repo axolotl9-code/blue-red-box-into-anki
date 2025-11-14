@@ -12,6 +12,26 @@ import numpy as np
 import datetime
 import time
 
+def format_deck_name(subject_name):
+    """
+    과목 이름에 괄호가 있을 경우,
+    괄호 안의 내용을 상위 덱 이름으로,
+    괄호 밖의 내용을 하위 덱 이름으로 변환한다.
+    예: '사회학의 이해(앉아서)' -> '앉아서::사회학의 이해'
+    """
+    if "(" not in subject_name or ")" not in subject_name:
+        return subject_name
+    # 마지막 괄호 쌍 기준으로 분리
+    open_idx = subject_name.rfind("(")
+    close_idx = subject_name.rfind(")")
+    if open_idx == -1 or close_idx == -1 or open_idx > close_idx:
+        return subject_name
+    parent = subject_name[open_idx + 1:close_idx].strip()
+    child = (subject_name[:open_idx] + subject_name[close_idx + 1:]).strip()
+    if not parent or not child:
+        return subject_name
+    return f"{parent}::{child}"
+
 def boxing(image_input):
     if isinstance(image_input, str):
         img = cv2.imread(image_input)
@@ -207,6 +227,7 @@ def main():
     for subject_name, image_items in grouped_data.items():
         subject_hash = int(hashlib.sha256(subject_name.encode('utf-8')).hexdigest(), 16) % (10**9)
         model_id = base_model_id + subject_hash
+        deck_name = format_deck_name(subject_name)
         my_model = genanki.Model(
             model_id,
             'Simple Image Card',
@@ -222,8 +243,7 @@ def main():
                 },
             ])
         my_deck = genanki.Deck(
-            abs(hash(subject_name)),
-            '자동으로 만든 덱::자동으로 만든 '+subject_name)
+            abs(hash(subject_name)), deck_name)
         media_files = []
         for item in image_items:
             original_filename = item[1]
@@ -259,7 +279,7 @@ def main():
                         f'<img src="{original_img_filename}">',
                     ])
                 my_deck.add_note(my_note)
-        base_apkg_filename = f"완성된 {subject_name}.apkg"
+        base_apkg_filename = f"{subject_name}.apkg"
         apkg_output_path = os.path.join(anki_output_dir, base_apkg_filename)
         counter = 1
         while os.path.exists(apkg_output_path):
