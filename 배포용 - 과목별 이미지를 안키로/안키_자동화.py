@@ -224,10 +224,7 @@ def main():
             abs(hash(subject_name)),
             '자동으로 만든 덱::자동으로 만든 '+subject_name)
         media_files = []
-        # Ensure notes are added in the desired chronological order (oldest first).
-        # If the list ended up reversed earlier in the pipeline, iterating in reverse here
-        # corrects the final Anki card order.
-        for item in image_items[::-1]:
+        for item in image_items:
             original_filename = item[1]
             processed_regions = item[3]
             if processed_regions and processed_regions[0][0] is not None:
