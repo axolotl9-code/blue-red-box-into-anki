@@ -1,5 +1,5 @@
 # 필요한 패키지 설치 안내
-# pip install genanki pandas pillow opencv-python numpy
+# pip install genanki pandas pillow opencv-python numpy pdf2image
 
 import genanki
 import hashlib
@@ -11,6 +11,12 @@ import cv2
 import numpy as np
 import datetime
 import time
+try:
+    from pdf2image import convert_from_path
+    PDF_SUPPORT = True
+except ImportError:
+    PDF_SUPPORT = False
+    print("pdf2image가 설치되지 않았습니다. PDF 지원을 위해 'pip install pdf2image'를 실행하세요.")
 
 def format_deck_name(subject_name):
     """
@@ -92,6 +98,26 @@ def find_blue_boxes(image_input):
 def crop_image_to_box(image, box):
     return image.crop(box)
 
+def convert_pdf_to_images(pdf_path):
+    """
+    PDF 파일을 이미지 리스트로 변환합니다.
+    각 페이지가 하나의 이미지가 됩니다.
+    
+    Returns:
+        List of PIL Image objects, one per page in order
+    """
+    if not PDF_SUPPORT:
+        print(f"PDF 지원이 비활성화되어 있습니다: {pdf_path}")
+        return []
+    
+    try:
+        # DPI를 높게 설정하여 고해상도 이미지 생성
+        images = convert_from_path(pdf_path, dpi=200)
+        return images
+    except Exception as e:
+        print(f"PDF 변환 오류: {pdf_path}, {e}")
+        return []
+
 def main():
     base_dir = os.path.dirname(os.path.abspath(__file__))
     subjects_dir = os.path.join(base_dir, "과목들")
@@ -133,11 +159,11 @@ def main():
         subject_path = os.path.join(subjects_dir, subject_name)
         if not os.path.isdir(subject_path):
             continue
-        # Collect image files and sort them by creation time (oldest first)
+        # Collect image files and PDF files
         try:
             candidate_files = [f for f in os.listdir(subject_path)
                                if os.path.isfile(os.path.join(subject_path, f))
-                               and f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+                               and f.lower().endswith(('.png', '.jpg', '.jpeg', '.pdf'))]
         except Exception:
             candidate_files = []
 
@@ -153,16 +179,29 @@ def main():
                 ts_for_sort = ts
             return (ts_for_sort, fname.lower())
 
-        # 오래된 사진이 먼저 오도록 정렬 (찍은 순서대로 카드가 만들어지도록)
+        # 오래된 파일이 먼저 오도록 정렬 (순서대로 카드가 만들어지도록)
         candidate_files.sort(key=sort_key)
 
         for file in candidate_files:
-            image_path = os.path.join(subject_path, file)
-            try:
-                original_image = Image.open(image_path)
-                image_data_list.append([subject_name, file, original_image])
-            except Exception as e:
-                print(f"이미지 처리 오류: {image_path}, {e}")
+            file_path = os.path.join(subject_path, file)
+            
+            # PDF 파일 처리
+            if file.lower().endswith('.pdf'):
+                print(f"PDF 처리 중: {file}")
+                pdf_images = convert_pdf_to_images(file_path)
+                for page_num, pdf_image in enumerate(pdf_images, start=1):
+                    # PDF의 각 페이지를 별도 이미지로 처리
+                    # 파일명에 페이지 번호 추가
+                    pdf_filename = f"{os.path.splitext(file)[0]}_page{page_num:03d}.png"
+                    image_data_list.append([subject_name, pdf_filename, pdf_image])
+                    print(f"  페이지 {page_num}/{len(pdf_images)} 추가됨")
+            else:
+                # 일반 이미지 파일 처리
+                try:
+                    original_image = Image.open(file_path)
+                    image_data_list.append([subject_name, file, original_image])
+                except Exception as e:
+                    print(f"이미지 처리 오류: {file_path}, {e}")
 
     # 이미지 리사이즈
     target_width = 1280
@@ -293,19 +332,19 @@ def main():
         except Exception as e:
             print(f"Anki 패키지 생성 오류: {e}")
 
-    # 원본 이미지 및 생성 파일 삭제
+    # 원본 이미지 및 PDF 파일 삭제
     for subject_name in os.listdir(subjects_dir):
         subject_path = os.path.join(subjects_dir, subject_name)
         if not os.path.isdir(subject_path):
             continue
         for file in os.listdir(subject_path):
-            image_path = os.path.join(subject_path, file)
-            if os.path.isfile(image_path) and file.lower().endswith(('.png', '.jpg', '.jpeg')):
+            file_path = os.path.join(subject_path, file)
+            if os.path.isfile(file_path) and file.lower().endswith(('.png', '.jpg', '.jpeg', '.pdf')):
                 try:
-                    os.remove(image_path)
-                    print(f"삭제됨: {image_path}")
+                    os.remove(file_path)
+                    print(f"삭제됨: {file_path}")
                 except OSError as e:
-                    print(f"삭제 오류: {image_path}, {e}")
+                    print(f"삭제 오류: {file_path}, {e}")
 
     # processed_images_output 폴더 정리
     if os.path.exists(output_dir):
