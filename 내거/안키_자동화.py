@@ -1,22 +1,23 @@
 # 필요한 패키지 설치 안내
-# pip install genanki pandas pillow opencv-python numpy pdf2image
+# pip install genanki pandas pillow opencv-python numpy pymupdf
 
 import genanki
 import hashlib
 import os
 import csv
 import shutil
+import io
 from PIL import Image, ImageDraw
 import cv2
 import numpy as np
 import datetime
 import time
 try:
-    from pdf2image import convert_from_path
+    import fitz  # PyMuPDF
     PDF_SUPPORT = True
 except ImportError:
     PDF_SUPPORT = False
-    print("pdf2image가 설치되지 않았습니다. PDF 지원을 위해 'pip install pdf2image'를 실행하세요.")
+    print("PyMuPDF가 설치되지 않았습니다. PDF 지원을 위해 'pip install pymupdf'를 실행하세요.")
 
 def format_deck_name(subject_name):
     """
@@ -111,8 +112,24 @@ def convert_pdf_to_images(pdf_path):
         return []
     
     try:
-        # DPI를 높게 설정하여 고해상도 이미지 생성
-        images = convert_from_path(pdf_path, dpi=200)
+        # PyMuPDF를 사용하여 PDF를 이미지로 변환
+        pdf_document = fitz.open(pdf_path)
+        images = []
+        
+        # 각 페이지를 고해상도 이미지로 변환
+        zoom = 2.0  # 해상도 증가 (2배)
+        mat = fitz.Matrix(zoom, zoom)
+        
+        for page_num in range(len(pdf_document)):
+            page = pdf_document[page_num]
+            pix = page.get_pixmap(matrix=mat)
+            
+            # Pixmap을 PIL Image로 변환
+            img_data = pix.tobytes("png")
+            img = Image.open(io.BytesIO(img_data))
+            images.append(img)
+        
+        pdf_document.close()
         return images
     except Exception as e:
         print(f"PDF 변환 오류: {pdf_path}, {e}")
