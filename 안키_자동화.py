@@ -273,8 +273,9 @@ def main():
     anki_output_dir = os.path.join(base_dir, anki_cards_dir_name)
     os.makedirs(anki_output_dir, exist_ok=True)
     
-    # ✅ 고정된 Model ID 사용 - 이렇게 하면 매번 같은 노트타입으로 인식되어 +++ 가 생기지 않음
-    FIXED_MODEL_ID = 1607392319  # 절대 변경하지 말 것!
+    # ✅ Anki 기본 제공 Basic 노트타입 사용 (Front/Back 필드)
+    # Basic 노트타입의 고정 ID
+    BASIC_MODEL_ID = 1376484377
     
     grouped_data = {}
     for item in image_data_list:
@@ -283,22 +284,22 @@ def main():
             grouped_data[subject_name] = []
         grouped_data[subject_name].append(item)
 
-    # ✅ 모든 덱이 공유할 단 하나의 Model을 루프 밖에서 정의
+    # ✅ Anki의 기본 Basic 노트타입 구조 사용
     my_model = genanki.Model(
-        FIXED_MODEL_ID,
-        'Simple Image Card',
+        BASIC_MODEL_ID,
+        'Basic',
         fields=[
-            {'name': 'Processed Image'},
-            {'name': 'Original Image'},
+            {'name': 'Front'},
+            {'name': 'Back'},
         ],
         templates=[
             {
                 'name': 'Card 1',
-                'qfmt': '{{Processed Image}}',
-                'afmt': '{{FrontSide}}<hr id="answer">{{Original Image}}',
+                'qfmt': '{{Front}}',
+                'afmt': '{{FrontSide}}<hr id="answer">{{Back}}',
             },
         ],
-        css='.card { font-family: arial; font-size: 20px; text-align: center; }'
+        css='.card { font-family: arial; font-size: 20px; text-align: center; color: black; background-color: white; }'
     )
 
     for subject_name, image_items in grouped_data.items():
@@ -321,11 +322,12 @@ def main():
                     original_html.append(f'<img src="{original_img_filename}">')
                     media_files.append(os.path.join(output_dir, processed_img_filename))
                     media_files.append(os.path.join(output_dir, original_img_filename))
+                # Basic 노트타입: Front(문제)와 Back(정답)
                 my_note = genanki.Note(
                     model=my_model,
                     fields=[
-                        '<br>'.join(processed_html),
-                        '<br>'.join(original_html),
+                        '<br>'.join(processed_html),  # Front: 가려진 이미지
+                        '<br>'.join(original_html),   # Back: 원본 이미지
                     ])
                 my_deck.add_note(my_note)
             else:
@@ -333,11 +335,12 @@ def main():
                 original_img_filename = f"{original_filename.rsplit('.', 1)[0]}-1_original.{original_filename.rsplit('.', 1)[1]}"
                 media_files.append(os.path.join(output_dir, processed_img_filename))
                 media_files.append(os.path.join(output_dir, original_img_filename))
+                # Basic 노트타입: Front(문제)와 Back(정답)
                 my_note = genanki.Note(
                     model=my_model,
                     fields=[
-                        f'<img src="{processed_img_filename}">',
-                        f'<img src="{original_img_filename}">',
+                        f'<img src="{processed_img_filename}">',  # Front: 가려진 이미지
+                        f'<img src="{original_img_filename}">',   # Back: 원본 이미지
                     ])
                 my_deck.add_note(my_note)
         base_apkg_filename = f"{subject_name}.apkg"
