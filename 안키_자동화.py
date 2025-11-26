@@ -272,7 +272,10 @@ def main():
     # 안키 덱 생성
     anki_output_dir = os.path.join(base_dir, anki_cards_dir_name)
     os.makedirs(anki_output_dir, exist_ok=True)
-    base_model_id = 1234567890
+    
+    # ✅ 고정된 Model ID 사용 - 이렇게 하면 매번 같은 노트타입으로 인식되어 +++ 가 생기지 않음
+    FIXED_MODEL_ID = 1607392319  # 절대 변경하지 말 것!
+    
     grouped_data = {}
     for item in image_data_list:
         subject_name = item[0]
@@ -281,11 +284,10 @@ def main():
         grouped_data[subject_name].append(item)
 
     for subject_name, image_items in grouped_data.items():
-        subject_hash = int(hashlib.sha256(subject_name.encode('utf-8')).hexdigest(), 16) % (10**9)
-        model_id = base_model_id + subject_hash
         deck_name = format_deck_name(subject_name)
+        # ✅ 모든 덱에서 동일한 고정 Model ID 사용
         my_model = genanki.Model(
-            model_id,
+            FIXED_MODEL_ID,
             'Simple Image Card',
             fields=[
                 {'name': 'Processed Image'},
