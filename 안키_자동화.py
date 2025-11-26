@@ -283,23 +283,26 @@ def main():
             grouped_data[subject_name] = []
         grouped_data[subject_name].append(item)
 
+    # ✅ 모든 덱이 공유할 단 하나의 Model을 루프 밖에서 정의
+    my_model = genanki.Model(
+        FIXED_MODEL_ID,
+        'Simple Image Card',
+        fields=[
+            {'name': 'Processed Image'},
+            {'name': 'Original Image'},
+        ],
+        templates=[
+            {
+                'name': 'Card 1',
+                'qfmt': '{{Processed Image}}',
+                'afmt': '{{FrontSide}}<hr id="answer">{{Original Image}}',
+            },
+        ],
+        css='.card { font-family: arial; font-size: 20px; text-align: center; }'
+    )
+
     for subject_name, image_items in grouped_data.items():
         deck_name = format_deck_name(subject_name)
-        # ✅ 모든 덱에서 동일한 고정 Model ID 사용
-        my_model = genanki.Model(
-            FIXED_MODEL_ID,
-            'Simple Image Card',
-            fields=[
-                {'name': 'Processed Image'},
-                {'name': 'Original Image'},
-            ],
-            templates=[
-                {
-                    'name': 'Card 1',
-                    'qfmt': '{{Processed Image}}',
-                    'afmt': '{{FrontSide}}<hr id="answer">{{Original Image}}',
-                },
-            ])
         my_deck = genanki.Deck(
             abs(hash(subject_name)), deck_name)
         media_files = []
