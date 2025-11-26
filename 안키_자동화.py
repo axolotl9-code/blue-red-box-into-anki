@@ -273,9 +273,9 @@ def main():
     anki_output_dir = os.path.join(base_dir, anki_cards_dir_name)
     os.makedirs(anki_output_dir, exist_ok=True)
     
-    # ✅ Anki 기본 제공 Basic 노트타입 사용 (Front/Back 필드)
-    # Basic 노트타입의 고정 ID
-    BASIC_MODEL_ID = 1376484377
+    # ✅ 고유한 노트타입 이름 사용 - 절대 충돌 없음
+    # 고정된 Model ID (절대 변경하지 말 것!)
+    IMAGE_MODEL_ID = 1607392319
     
     grouped_data = {}
     for item in image_data_list:
@@ -284,10 +284,10 @@ def main():
             grouped_data[subject_name] = []
         grouped_data[subject_name].append(item)
 
-    # ✅ Anki의 기본 Basic 노트타입 구조 사용
+    # ✅ 고유한 이름의 노트타입 생성 (Basic 구조 그대로, 이름만 다름)
     my_model = genanki.Model(
-        BASIC_MODEL_ID,
-        'Basic',
+        IMAGE_MODEL_ID,
+        'ImageBasic',  # 고유한 이름으로 충돌 방지
         fields=[
             {'name': 'Front'},
             {'name': 'Back'},
