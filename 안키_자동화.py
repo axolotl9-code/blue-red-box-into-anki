@@ -141,6 +141,8 @@ def main():
     parser = argparse.ArgumentParser(description='Anki automation: process images and PDFs into decks')
     parser.add_argument('--import-files', nargs='+', help='Absolute paths to image/pdf files to import (bypass 과목들 traversal)')
     parser.add_argument('--delete-sources', action='store_true', help='If set, delete the original source files processed in this run')
+    # Make deletion the default behavior for convenience. Users can edit the script to change this.
+    parser.set_defaults(delete_sources=True)
     args = parser.parse_args()
 
     base_dir = os.path.dirname(os.path.abspath(__file__))
