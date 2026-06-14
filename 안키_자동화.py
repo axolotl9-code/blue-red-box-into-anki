@@ -12,6 +12,7 @@ import cv2
 import numpy as np
 import datetime
 import time
+import argparse
 try:
     import fitz  # PyMuPDF
     PDF_SUPPORT = True
@@ -136,12 +137,21 @@ def convert_pdf_to_images(pdf_path):
         return []
 
 def main():
+    # parse CLI args (if any)
+    parser = argparse.ArgumentParser(description='Anki automation: process images and PDFs into decks')
+    parser.add_argument('--import-files', nargs='+', help='Absolute paths to image/pdf files to import (bypass 과목들 traversal)')
+    parser.add_argument('--delete-sources', action='store_true', help='If set, delete the original source files processed in this run')
+    args = parser.parse_args()
+
     base_dir = os.path.dirname(os.path.abspath(__file__))
     subjects_dir = os.path.join(base_dir, "과목들")
     anki_cards_dir_name = "완성된 안키 카드들"
-    output_dir = os.path.join(base_dir, "processed_images_output")
+    # Use a run-unique output dir so previous runs' files aren't reused
+    run_ts = int(time.time())
+    output_dir = os.path.join(base_dir, f"processed_images_output_{run_ts}")
     os.makedirs(output_dir, exist_ok=True)
 
+    # image_data_list items: [deck_key, orig_file_name, save_name, image(PIL), processed_regions, source_abs_path]
     image_data_list = []
     # 과목 폴더 탐색
     if not os.path.exists(subjects_dir):
@@ -172,58 +182,89 @@ def main():
         except Exception:
             return None
 
-    for subject_name in os.listdir(subjects_dir):
-        subject_path = os.path.join(subjects_dir, subject_name)
-        if not os.path.isdir(subject_path):
-            continue
-        # Collect image files and PDF files
-        try:
-            candidate_files = [f for f in os.listdir(subject_path)
-                               if os.path.isfile(os.path.join(subject_path, f))
-                               and f.lower().endswith(('.png', '.jpg', '.jpeg', '.pdf'))]
-        except Exception:
-            candidate_files = []
+    # If --import-files provided, build image_data_list from those paths
+    if args.import_files:
+        for file_path in args.import_files:
+            if not os.path.isabs(file_path):
+                print(f"경로가 절대 경로가 아닙니다. 건너뜁니다: {file_path}")
+                continue
+            if not os.path.exists(file_path):
+                print(f"파일을 찾을 수 없습니다: {file_path}")
+                continue
 
-        # Sort by photo taken time (EXIF DateTimeOriginal) if available.
-        # Fallback: file modification time, then filename to ensure deterministic order.
-        def sort_key(fname):
-            path = os.path.join(subject_path, fname)
-            ts = get_image_taken_timestamp(path)
-            # None should sort after real timestamps; use a tuple so filename acts as tiebreaker
-            if ts is None:
-                ts_for_sort = float('inf')
-            else:
-                ts_for_sort = ts
-            return (ts_for_sort, fname.lower())
+            parent_dir = os.path.basename(os.path.dirname(file_path))
+            # For --import-files, use filename stem (without extension) as deck_key for better granularity
+            # This avoids all files in Trash folder having the same deck_key
+            file_stem = os.path.splitext(os.path.basename(file_path))[0]
+            deck_key = file_stem
 
-        # 오래된 파일이 먼저 오도록 정렬 (순서대로 카드가 만들어지도록)
-        candidate_files.sort(key=sort_key)
-
-        for file in candidate_files:
-            file_path = os.path.join(subject_path, file)
-            
-            # PDF 파일 처리
-            if file.lower().endswith('.pdf'):
-                print(f"PDF 처리 중: {file}")
+            if file_path.lower().endswith('.pdf'):
+                print(f"PDF 처리 중: {file_path}")
                 pdf_images = convert_pdf_to_images(file_path)
                 for page_num, pdf_image in enumerate(pdf_images, start=1):
-                    # PDF의 각 페이지를 별도 이미지로 처리
-                    # 파일명에 페이지 번호 추가
-                    pdf_filename = f"{os.path.splitext(file)[0]}_page{page_num:03d}.png"
-                    image_data_list.append([subject_name, pdf_filename, pdf_image])
-                    print(f"  페이지 {page_num}/{len(pdf_images)} 추가됨")
+                    pdf_filename = f"{os.path.splitext(os.path.basename(file_path))[0]}_page{page_num:03d}.png"
+                    image_data_list.append([deck_key, os.path.basename(file_path), pdf_filename, pdf_image, None, file_path])
+                    print(f"  페이지 {page_num}/{len(pdf_images)} 추가됨: deck={deck_key}")
             else:
-                # 일반 이미지 파일 처리
                 try:
                     original_image = Image.open(file_path)
-                    image_data_list.append([subject_name, file, original_image])
+                    image_data_list.append([deck_key, os.path.basename(file_path), os.path.basename(file_path), original_image, None, file_path])
                 except Exception as e:
                     print(f"이미지 처리 오류: {file_path}, {e}")
+    else:
+        # Walk the subjects_dir recursively so any folder depth is supported.
+        for root, dirs, files in os.walk(subjects_dir):
+            # Compute relative path from subjects_dir and use its parts as deck hierarchy
+            rel_root = os.path.relpath(root, subjects_dir)
+            if rel_root == '.':
+                deck_key = ''
+            else:
+                # Convert file system path to Anki deck path using '::' separator
+                parts = [p for p in rel_root.split(os.sep) if p and p != anki_cards_dir_name]
+                deck_key = '::'.join(parts)
+
+            # Collect candidate files in this directory
+            try:
+                candidate_files = [f for f in files if f.lower().endswith(('.png', '.jpg', '.jpeg', '.pdf'))]
+            except Exception:
+                candidate_files = []
+
+            # Sorting key uses timestamp from file or embedded EXIF; ties broken by filename
+            def sort_key(fname):
+                path = os.path.join(root, fname)
+                ts = get_image_taken_timestamp(path)
+                if ts is None:
+                    ts_for_sort = float('inf')
+                else:
+                    ts_for_sort = ts
+                return (ts_for_sort, fname.lower())
+
+            candidate_files.sort(key=sort_key)
+
+            for file in candidate_files:
+                file_path = os.path.join(root, file)
+
+                # Build the deck identifier as deck_key ('' means top-level subject folder name will be used later)
+                # For PDF, convert pages to images and name them with page numbers
+                if file.lower().endswith('.pdf'):
+                    print(f"PDF 처리 중: {file_path}")
+                    pdf_images = convert_pdf_to_images(file_path)
+                    for page_num, pdf_image in enumerate(pdf_images, start=1):
+                        pdf_filename = f"{os.path.splitext(file)[0]}_page{page_num:03d}.png"
+                        image_data_list.append([deck_key, file, pdf_filename, pdf_image, None, file_path])
+                        print(f"  페이지 {page_num}/{len(pdf_images)} 추가됨: deck={deck_key}")
+                else:
+                    try:
+                        original_image = Image.open(file_path)
+                        image_data_list.append([deck_key, file, file, original_image, None, file_path])
+                    except Exception as e:
+                        print(f"이미지 처리 오류: {file_path}, {e}")
 
     # 이미지 리사이즈
     target_width = 1280
-    for item in image_data_list:
-        original_image = item[2]
+    for idx, item in enumerate(image_data_list):
+        # item format now: [deck_key, orig_file, save_name, image]
+        original_image = item[3]
         original_width, original_height = original_image.size
         if original_width > 0:
             aspect_ratio = original_height / original_width
@@ -232,13 +273,14 @@ def main():
             new_height = original_height
         try:
             resized_image = original_image.resize((target_width, new_height), Image.Resampling.LANCZOS)
-            item[2] = resized_image
+            image_data_list[idx][3] = resized_image
         except Exception as e:
-            print(f"리사이즈 오류: {item[1]}, {e}")
+            print(f"리사이즈 오류: {item[2]}, {e}")
 
     # 이미지 처리 및 저장
-    for item in image_data_list:
-        subject_name, original_filename, original_image = item
+    for idx, item in enumerate(image_data_list):
+        # item format: [deck_key, orig_file, save_name, image, processed_regions, source_abs_path]
+        deck_key, orig_file, save_name, original_image = item[0], item[1], item[2], item[3]
         blue_boxes = find_blue_boxes(original_image)
         processed_regions = []
         if blue_boxes:
@@ -249,18 +291,20 @@ def main():
         else:
             processed_image = boxing(original_image)
             processed_regions.append((None, original_image, processed_image))
-        item.append(processed_regions)
+        # store processed regions back into the item's slot
+        image_data_list[idx][4] = processed_regions
 
     # 이미지 파일 및 CSV 저장
     csv_output_path = os.path.join(output_dir, "image_pairs.csv")
     with open(csv_output_path, 'w', newline='', encoding='utf-8') as csvfile:
         csv_writer = csv.writer(csvfile)
         for item in image_data_list:
-            original_filename = item[1]
-            processed_regions = item[3]
-            for idx, orig_crop, proc_crop in processed_regions:
-                name, ext = os.path.splitext(original_filename)
-                region_suffix = f"_region{idx+1}" if idx is not None else ""
+            # item: [deck_key, orig_file, save_name, image, processed_regions]
+            save_name = item[2]
+            processed_regions = item[4]
+            for ridx, orig_crop, proc_crop in processed_regions:
+                name, ext = os.path.splitext(save_name)
+                region_suffix = f"_region{ridx+1}" if ridx is not None else ""
                 processed_img_save_name = f"{name}{region_suffix}-1_processed{ext}"
                 original_img_save_name = f"{name}{region_suffix}-1_original{ext}"
                 processed_img_save_path = os.path.join(output_dir, processed_img_save_name)
@@ -277,12 +321,22 @@ def main():
     # 고정된 Model ID (절대 변경하지 말 것!)
     IMAGE_MODEL_ID = 1607392319
     
+    # Group images by deck key (deck_key may be '' for top-level folders)
     grouped_data = {}
     for item in image_data_list:
-        subject_name = item[0]
-        if subject_name not in grouped_data:
-            grouped_data[subject_name] = []
-        grouped_data[subject_name].append(item)
+        deck_key = item[0]
+        # If deck_key is empty, derive deck name from the source file's parent folder
+        if not deck_key:
+            source_abs = item[5]
+            if source_abs:
+                deck_name_key = os.path.basename(os.path.dirname(source_abs))
+            else:
+                deck_name_key = 'Default'
+        else:
+            deck_name_key = deck_key
+        if deck_name_key not in grouped_data:
+            grouped_data[deck_name_key] = []
+        grouped_data[deck_name_key].append(item)
 
     # ✅ 고유한 이름의 노트타입 생성 (Basic 구조 그대로, 이름만 다름)
     my_model = genanki.Model(
@@ -302,19 +356,29 @@ def main():
         css='.card { font-family: arial; font-size: 20px; text-align: center; color: black; background-color: white; }'
     )
 
-    for subject_name, image_items in grouped_data.items():
-        deck_name = format_deck_name(subject_name)
-        my_deck = genanki.Deck(
-            abs(hash(subject_name)), deck_name)
+    # Collect all decks and their media to write into one .apkg
+    all_decks = []  # list of (deck, model, media_files)
+    for subject_key, image_items in grouped_data.items():
+        # subject_key is the deck hierarchy like '앉아서::물리' (or '' for top-level default)
+        if subject_key:
+            deck_name = subject_key
+        else:
+            # fallback: use a generic name if no key (shouldn't normally happen)
+            deck_name = 'Default'
+        # use deterministic positive deck id from SHA1 to avoid collisions and negative ids
+        deck_hash = hashlib.sha1(deck_name.encode('utf-8')).hexdigest()[:12]
+        deck_id = int(deck_hash, 16) % (10 ** 12)
+        my_deck = genanki.Deck(deck_id, deck_name)
         media_files = []
         for item in image_items:
-            original_filename = item[1]
-            processed_regions = item[3]
+            # item: [deck_key, orig_file, save_name, image, processed_regions]
+            save_name = item[2]
+            processed_regions = item[4]
             if processed_regions and processed_regions[0][0] is not None:
                 processed_html = []
                 original_html = []
                 for idx, orig_crop, proc_crop in processed_regions:
-                    name, ext = os.path.splitext(original_filename)
+                    name, ext = os.path.splitext(save_name)
                     region_suffix = f"_region{idx+1}"
                     processed_img_filename = f"{name}{region_suffix}-1_processed{ext}"
                     original_img_filename = f"{name}{region_suffix}-1_original{ext}"
@@ -331,8 +395,8 @@ def main():
                     ])
                 my_deck.add_note(my_note)
             else:
-                processed_img_filename = f"{original_filename.rsplit('.', 1)[0]}-1_processed.{original_filename.rsplit('.', 1)[1]}"
-                original_img_filename = f"{original_filename.rsplit('.', 1)[0]}-1_original.{original_filename.rsplit('.', 1)[1]}"
+                processed_img_filename = f"{save_name.rsplit('.', 1)[0]}-1_processed.{save_name.rsplit('.', 1)[1]}"
+                original_img_filename = f"{save_name.rsplit('.', 1)[0]}-1_original.{save_name.rsplit('.', 1)[1]}"
                 media_files.append(os.path.join(output_dir, processed_img_filename))
                 media_files.append(os.path.join(output_dir, original_img_filename))
                 # Basic 노트타입: Front(문제)와 Back(정답)
@@ -343,7 +407,7 @@ def main():
                         f'<img src="{original_img_filename}">',   # Back: 원본 이미지
                     ])
                 my_deck.add_note(my_note)
-        base_apkg_filename = f"{subject_name}.apkg"
+        base_apkg_filename = f"{deck_name}.apkg"
         apkg_output_path = os.path.join(anki_output_dir, base_apkg_filename)
         counter = 1
         while os.path.exists(apkg_output_path):
@@ -351,25 +415,55 @@ def main():
             apkg_filename = f"{name}-{counter}{ext}"
             apkg_output_path = os.path.join(anki_output_dir, apkg_filename)
             counter += 1
-        try:
-            genanki.Package(my_deck, media_files=media_files).write_to_file(apkg_output_path)
-            print(f"Anki 패키지 생성 완료: {apkg_output_path}")
-        except Exception as e:
-            print(f"Anki 패키지 생성 오류: {e}")
+        # store deck + media for single package creation later
+        all_decks.append((my_deck, my_model, media_files, deck_name))
 
-    # 원본 이미지 및 PDF 파일 삭제
-    for subject_name in os.listdir(subjects_dir):
-        subject_path = os.path.join(subjects_dir, subject_name)
-        if not os.path.isdir(subject_path):
-            continue
-        for file in os.listdir(subject_path):
-            file_path = os.path.join(subject_path, file)
-            if os.path.isfile(file_path) and file.lower().endswith(('.png', '.jpg', '.jpeg', '.pdf')):
-                try:
-                    os.remove(file_path)
-                    print(f"삭제됨: {file_path}")
-                except OSError as e:
-                    print(f"삭제 오류: {file_path}, {e}")
+    # Write a single .apkg containing all decks and their media
+    combined_name = '완성된_모든_과목.apkg'
+    combined_path = os.path.join(anki_output_dir, combined_name)
+    counter = 1
+    while os.path.exists(combined_path):
+        name, ext = os.path.splitext(combined_name)
+        combined_name_version = f"{name}-{counter}{ext}"
+        combined_path = os.path.join(anki_output_dir, combined_name_version)
+        counter += 1
+
+    # collect unique media files across all decks, only include files that actually exist
+    combined_media = []
+    for _, _, media_files, _ in all_decks:
+        for m in media_files:
+            if m not in combined_media and os.path.exists(m):
+                combined_media.append(m)
+
+    try:
+        if not all_decks:
+            print("생성할 덱이 없습니다.")
+        else:
+            decks_only = [t[0] for t in all_decks]
+            pkg = genanki.Package(decks_only, media_files=combined_media)
+            pkg.write_to_file(combined_path)
+            print(f"Anki 통합 패키지 생성 완료: {combined_path}")
+    except Exception as e:
+        print(f"Anki 패키지 생성 오류: {e}")
+
+    # 원본 이미지 및 PDF 파일 삭제: 이번 실행에서 처리한 파일만 삭제
+    processed_source_paths = set()
+    for item in image_data_list:
+        src = item[5]
+        if src:
+            processed_source_paths.add(src)
+
+    if args.delete_sources:
+        for src_path in processed_source_paths:
+            try:
+                if os.path.exists(src_path) and os.path.isfile(src_path):
+                    os.remove(src_path)
+                    print(f"삭제됨: {src_path}")
+            except OSError as e:
+                print(f"삭제 오류: {src_path}, {e}")
+    else:
+        if processed_source_paths:
+            print("참고: --delete-sources 플래그가 설정되지 않았으므로 원본 파일은 삭제되지 않습니다.")
 
     # processed_images_output 폴더 정리
     if os.path.exists(output_dir):
